@@ -1,0 +1,20 @@
+﻿ExportExcels 读表工具 - Unity 侧配套包(整个目录拷进 Unity 工程即用)
+
+运行时(必需, 与导表工具的二进制格式配套):
+  DynamicPacket.cs        二进制读取器
+  IDynamicData.cs         接口(旧版兼容保留)
+  SheetGenCommonFunc.cs   字符串解析函数(旧版兼容保留, 新生成代码不依赖)
+
+Editor/ (仅编辑器使用, 不会打进包体):
+  TableBrowser.cs         菜单[读表工具/表数据浏览器]: 浏览/搜索全部表数据,
+                          目录自动扫描(TBL 头), 首次打开即可用
+  TableToolLauncher.cs    菜单[读表工具/打开导表工具] (快捷键 Ctrl+Shift+T),
+                          首次使用配置导表工具路径(exe 或 Main.py)
+
+生成代码(Tab_/TabMgr_/TableManager)由导表工具输出到工程指定脚本目录,
+均为 partial —— 业务扩展请另建 Tab_XXX.Ext.cs, 重新导出不会覆盖扩展文件。
+
+表数据格式(每表一个 .bytes):
+  [magic "TBL\0" 4B][版本 u16][schema_hash u32][行数 i32][行数据...]
+  加载入口: TableManager.LoadAllAsync / LoadAllFromResourcesAsync /
+            LoadAllFromDiskAsync / LoadAll(Dictionary)

@@ -1,0 +1,17 @@
+# 运行产生的本地输出
+ExportExcels/Export.log
+projectConfig.json
+*.temp
+
+# Excel 打开时产生的临时锁文件
+~$*.xlsx
+~$*.xls
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 示例工程产物
+Venv/
+__pycache__/
+*.pyc

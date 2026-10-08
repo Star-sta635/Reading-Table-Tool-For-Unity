@@ -1,0 +1,9 @@
+{
+  "is_client": true,
+  "path_excel": "E:/YourProject/Public/Tables",
+  "path_data": "E:/YourProject/Client/Assets/Game/Download/DataTable",
+  "path_script": "E:/YourProject/Client/Assets/Game/YouYouScript/Proto/DataTable/Create",
+  "is_cretescript": true,
+  "async_style": "task",
+  "skip_error_tables": true
+}
