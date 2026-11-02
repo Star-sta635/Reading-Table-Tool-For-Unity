@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据格式生成器</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0; padding: 20px; background: #f5f6fa; color: #333;
+  }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 300px; }
+  .panel {
+    background: #fff; border-radius: 8px; padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+  textarea {
+    width: 100%; min-height: 220px; padding: 10px; border: 1px solid #d0d4dc;
+    border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 14px; resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: #4a7dff; box-shadow: 0 0 0 2px rgba(74,125,255,0.15); }
+  select {
+    width: 100%; padding: 8px 10px; border: 1px solid #d0d4dc; border-radius: 6px;
+    font-size: 14px; background: #fff; outline: none;
+  }
+  select:focus { border-color: #4a7dff; }
+  .toolbar { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+  button {
+    padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px;
+    cursor: pointer; background: #4a7dff; color: #fff; font-weight: 500;
+  }
+  button:hover { background: #3a6ae8; }
+  button.secondary { background: #e8ebf2; color: #444; }
+  button.secondary:hover { background: #dce0ea; }
+  .msg { font-size: 13px; color: #e67e22; margin-top: 8px; min-height: 18px; }
+  .msg.error { color: #e74c3c; }
+  .msg.ok { color: #27ae60; }
+  .hint {
+    font-size: 12px; color: #888; margin-top: 6px; line-height: 1.6;
+    background: #f8f9fb; padding: 8px 10px; border-radius: 6px;
+  }
+  .hint code { background: #eef1f7; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎲 数据格式生成器</h1>
+  <div class="row">
+    <div class="col panel">
+      <label for="input">输入数据（每行一个，或用空格/逗号/分号分隔）</label>
+      <textarea id="input" placeholder="1013&#10;1014&#10;1015&#10;1016"></textarea>
+      <div class="hint">
+        示例：<code>1013 1014 1015 1016</code> 或每行一个数字。<br>
+        datetime 类型请直接输入日期文本，每行一个。
+      </div>
+    </div>
+    <div class="col panel">
+      <label for="type">选择类型</label>
+      <select id="type">
+        <optgroup label="Vector">
+          <option value="vector2">vector2</option>
+          <option value="vector3" selected>vector3</option>
+          <option value="vector4">vector4</option>
+        </optgroup>
+        <optgroup label="Datetime">
+          <option value="datetime">datetime</option>
+        </optgroup>
+        <optgroup label="List">
+          <option value="list_scalar">list[标量]</option>
+          <option value="list_vector2">list[vector2]</option>
+          <option value="list_vector3">list[vector3]</option>
+          <option value="list_vector4">list[vector4]</option>
+        </optgroup>
+        <optgroup label="Map">
+          <option value="map_scalar_scalar">map[标量|标量]</option>
+          <option value="map_scalar_vector2">map[标量|vector2]</option>
+          <option value="map_scalar_vector3">map[标量|vector3]</option>
+          <option value="map_scalar_vector4">map[标量|vector4]</option>
+        </optgroup>
+      </select>
+      <div class="hint" id="formatHint"></div>
+      <label for="output" style="margin-top:16px;">生成结果</label>
+      <textarea id="output" readonly placeholder="生成结果会显示在这里"></textarea>
+      <div class="toolbar">
+        <button id="copyBtn">复制结果</button>
+        <button class="secondary" id="clearBtn">清空输入</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const inputEl = document.getElementById('input');
+  const typeEl = document.getElementById('type');
+  const outputEl = document.getElementById('output');
+  const msgEl = document.getElementById('msg');
+  const formatHintEl = document.getElementById('formatHint');
+  const copyBtn = document.getElementById('copyBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const FORMAT_HINTS = {
+    vector2: '格式：<code>分量;分量</code>，例如 <code>1;2</code>',
+    vector3: '格式：<code>分量;分量;分量</code>，例如 <code>1;2;3</code>',
+    vector4: '格式：<code>分量;分量;分量;分量</code>，例如 <code>1;2;3;4</code>',
+    datetime: '格式：日期单元格，每行一个，例如 <code>2026-09-27</code> 或 <code>2026-09-27 18:30:00</code>',
+    list_scalar: '格式：元素用 <code>;</code> 分隔，例如 <code>1;2;3</code>；只填 <code>5</code> 也合法',
+    list_vector2: '格式：元素用 <code>|</code> 分隔，每个元素是 vector2，例如 <code>1;2|3;4</code>',
+    list_vector3: '格式：元素用 <code>|</code> 分隔，每个元素是 vector3，例如 <code>1;2;3|4;5;6</code>',
+    list_vector4: '格式：元素用 <code>|</code> 分隔，每个元素是 vector4，例如 <code>1;2;3;4|5;6;7;8</code>',
+    map_scalar_scalar: '格式：条目用 <code>|</code> 分隔，条目内 <code>K;V</code>，例如 <code>1;a|2;b</code>',
+    map_scalar_vector2: '格式：条目用 <code>|</code> 分隔，条目内 <code>K;V1;V2</code>，例如 <code>1;1;2|2;3;4</code>',
+    map_scalar_vector3: '格式：条目用 <code>|</code> 分隔，条目内 <code>K;V1;V2;V3</code>，例如 <code>1;1;2;3|2;4;5;6</code>',
+    map_scalar_vector4: '格式：条目用 <code>|</code> 分隔，条目内 <code>K;V1;V2;V3;V4</code>，例如 <code>1;1;2;3;4|2;5;6;7;8</code>',
+  };
+
+  function parseTokens(text) {
+    return text.split(/[\s,;|]+/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  }
+
+  function parseLines(text) {
+    return text.split(/\r?\n/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  }
+
+  function chunk(arr, size) {
+    const res = [];
+    for (let i = 0; i < arr.length; i += size) {
+      res.push(arr.slice(i, i + size));
+    }
+    return res;
+  }
+
+  function getVectorDim(type) {
+    const m = type.match(/vector(\d)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
+  function generate(type, input) {
+    const result = { output: '', msg: '', msgType: 'warn' };
+
+    if (type === 'datetime') {
+      const lines = parseLines(input);
+      result.output = lines.join('\n');
+      return result;
+    }
+
+    const tokens = parseTokens(input);
+    if (tokens.length === 0) return result;
+
+    if (type.indexOf('vector') === 0) {
+      const dim = getVectorDim(type);
+      if (tokens.length < dim) {
+        result.msg = '需要 ' + dim + ' 个分量，当前只有 ' + tokens.length + ' 个';
+        result.msgType = 'error';
+        result.output = tokens.join(';');
+        return result;
+      }
+      result.output = tokens.slice(0, dim).join(';');
+      if (tokens.length > dim) {
+        result.msg = '输入有 ' + tokens.length + ' 个值，只取了前 ' + dim + ' 个作为分量';
+      }
+      return result;
+    }
+
+    if (type === 'list_scalar') {
+      result.output = tokens.join(';');
+      return result;
+    }
+
+    if (type.indexOf('list_vector') === 0) {
+      const dim = getVectorDim(type);
+      const groups = chunk(tokens, dim);
+      const parts = [];
+      groups.forEach(function(g) { parts.push(g.join(';')); });
+      result.output = parts.join('|');
+      if (groups.length > 0 && groups[groups.length - 1].length < dim) {
+        result.msg = '最后一组只有 ' + groups[groups.length - 1].length + ' 个分量，不足 ' + dim + ' 个';
+      }
+      return result;
+    }
+
+    if (type === 'map_scalar_scalar') {
+      const groups = chunk(tokens, 2);
+      const parts = [];
+      let warn = '';
+      groups.forEach(function(g) {
+        if (g.length < 2) {
+          warn = '最后一个条目缺少 V，只有 K';
+          parts.push(g[0]);
+        } else {
+          parts.push(g[0] + ';' + g[1]);
+        }
+      });
+      result.output = parts.join('|');
+      result.msg = warn;
+      return result;
+    }
+
+    if (type.indexOf('map_scalar_vector') === 0) {
+      const dim = getVectorDim(type);
+      const size = 1 + dim;
+      const groups = chunk(tokens, size);
+      const parts = [];
+      let warn = '';
+      groups.forEach(function(g) {
+        if (g.length < size) {
+          warn = '最后一组只有 ' + g.length + ' 个值，需要 ' + size + ' 个（K + ' + dim + ' 个 V 分量）';
+        }
+        parts.push(g.join(';'));
+      });
+      result.output = parts.join('|');
+      result.msg = warn;
+      return result;
+    }
+
+    result.msg = '未知类型';
+    result.msgType = 'error';
+    return result;
+  }
+
+  function update() {
+    const type = typeEl.value;
+    const input = inputEl.value;
+    formatHintEl.innerHTML = FORMAT_HINTS[type] || '';
+    const res = generate(type, input);
+    outputEl.value = res.output;
+    msgEl.textContent = res.msg || '';
+    msgEl.className = 'msg' + (res.msgType === 'error' ? ' error' : (res.msgType === 'ok' ? ' ok' : ''));
+  }
+
+  inputEl.addEventListener('input', update);
+  typeEl.addEventListener('change', update);
+
+  copyBtn.addEventListener('click', function() {
+    const text = outputEl.value;
+    if (!text) {
+      msgEl.textContent = '没有可复制的内容';
+      msgEl.className = 'msg error';
+      return;
+    }
+    function done() {
+      msgEl.textContent = '已复制到剪贴板';
+      msgEl.className = 'msg ok';
+      setTimeout(function() {
+        if (msgEl.textContent === '已复制到剪贴板') {
+          msgEl.textContent = '';
+          msgEl.className = 'msg';
+        }
+      }, 1500);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function() {
+        fallbackCopy(text); done();
+      });
+    } else {
+      fallbackCopy(text); done();
+    }
+  });
+
+  function fallbackCopy(text) {
+    outputEl.removeAttribute('readonly');
+    outputEl.select();
+    outputEl.setSelectionRange(0, text.length);
+    try { document.execCommand('copy'); } catch (e) {}
+    outputEl.setAttribute('readonly', 'readonly');
+    window.getSelection().removeAllRanges();
+  }
+
+  clearBtn.addEventListener('click', function() {
+    inputEl.value = '';
+    update();
+    inputEl.focus();
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>
